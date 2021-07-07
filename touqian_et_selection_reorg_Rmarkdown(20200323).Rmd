@@ -1,0 +1,373 @@
+---
+title: "touqian_et_selection_reorg(20200319)"
+author: "onionsteven"
+date: "2020/3/19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 測試使用R Markdown做報告和資料整理
+
+```{r}
+library(dplyr)
+library(kableExtra)
+load("C:/Users/rslab/BU/2018NJ/Touqian1119/TouqianWorkPlace/et_rd_ga7_hr16_by_sta.RData")
+load("C:/Users/rslab/BU/2018NJ/Touqian1119/TouqianWorkPlace/et_rd_ga7_hr16.RData")
+```
+
+
+
+```{r}
+#完整度存放矩陣維度
+load("C:/Users/rslab/BU/2018NJ/Touqian1119/TouqianWorkPlace/complete.mat.RData")
+#complete.mat
+
+dim(complete.mat)
+
+#小時需要至少16小時 #hr need to be at least 16 hrs
+hr_need = 16
+
+#測站從前11站中尋找 至少需有7站 #guages need to be at least 7 ones in the first 11 guages
+gua_need = 7 
+
+complete_TF_mat = complete.mat>=hr_need
+
+#從前11個測站中挑選7站以上有資料的
+et_ga7_hr16_no = which(rowSums(complete_TF_mat[,1:11])>=gua_need)
+
+#有幾個事件符合條件
+length(et_ga7_hr16_no)
+
+
+
+```
+
+
+###有幾個事件符合條件
+```{r, echo=FALSE}
+length(et_ga7_hr16_no)
+```
+
+
+##20測站各有多少事件數
+```{r, echo=FALSE}
+et_num_by_gu = colSums(complete_TF_mat[et_ga7_hr16_no,])
+et_num_by_gu
+```
+
+##讀進所有選出的時雨量資料
+#確認資料長度為3400(170*20)
+```{r}
+load("C:/Users/rslab/BU/2018NJ/Touqian1119/TouqianWorkPlace/pick.up.RData")
+length(pick.up)
+```
+
+
+#選出長度為28的
+```{r, echo=FALSE}
+pick.up_len28 = pick.up[sapply(pick.up,length)==28]
+length(pick.up_len28)
+```
+
+#移除總雨量為0的
+```{r, echo=FALSE}
+pick.up_len28_nozero = pick.up_len28[sapply(pick.up_len28,function(x) x[2]!=0)]
+length(pick.up_len28_nozero)
+
+```
+
+#依照颱風事件選出
+```{r, echo=FALSE}
+wtd_et_ga7_hr16 = pick.up_len28_nozero[sapply(pick.up_len28_nozero,function(x) x[28]%in%et_ga7_hr16_no)]
+length(wtd_et_ga7_hr16)
+
+
+```
+
+#將list轉成data.frame
+```{r, echo=FALSE}
+
+et_rd_ga7_hr16 = data.frame(t(matrix(unlist(wtd_et_ga7_hr16),nrow=28)))
+names(et_rd_ga7_hr16)=c("date_time","crd",paste("hr",seq(1,24),sep=""),"sta","et")
+is.data.frame(et_rd_ga7_hr16)
+head(et_rd_ga7_hr16)
+head(et_rd_ga7_hr16[,3:26])
+
+```
+
+
+#移除颱風事件中不要的測站
+#T/F矩陣中數於所要的颱風事件部分 有些事件中的測站在小時數不符合
+```{r, echo=FALSE}
+
+TF_mat_ga7_hr16= complete_TF_mat[et_ga7_hr16_no,]
+gu_re_check=c()
+for(i in et_ga7_hr16_no){
+  et_mark=i
+  gu_mark=which(complete_TF_mat[i,]==T)
+  dada=et_rd_ga7_hr16[et_rd_ga7_hr16$et==et_mark,]
+  tel=dada$sta%in%gu_mark
+  sda=dada[tel,]
+  gu_re_check=rbind(gu_re_check,sda)
+}
+
+et_rd_ga7_hr16 = gu_re_check
+```
+
+#20測站的降雨mean及sd
+apply(et_rd_ga7_hr16,1,function(x) mean(x[3:26]))
+apply(et_rd_ga7_hr16,1,function(x) sd(x[3:26]))
+apply(et_rd_ga7_hr16,1,function(x) x[27])
+apply(et_rd_ga7_hr16,1,function(x) x[28])
+
+## 2020/03/20 52場事件統計特性整理
+
+```{r}
+#查看時雨量全距
+sda=et_rd_ga7_hr16[,3:26]
+range(sda)
+
+#查看降雨平均全距
+range(apply(sda,2,mean))
+
+#查看降雨標準差全距
+range(apply(sda,2,sd))
+```
+
+
+#有些尖峰降雨不只一個
+apply(sda,1,function(x) which(x==max(x)))
+
+
+
+#各站降雨平均與標準差折線圖
+#出圖呈現
+
+```{r echo =FALSE}
+#
+# #四張小圖在一起的大圖
+  #起始測站
+   #start_i = 1
+  # 連著畫張數
+   conti_fig_num = 3
+ 
+   mean_sd_line_chart = function(start_i,conti_fig_num){
+      #bmp(paste("mean_sd_linechart_gu_",start_i,".bmp",sep=""),width = 480*1.5,height = 480*1.5)
+     
+     par(mai=c(0.8,0.4,0.2,0.2),mfrow=c(2,2))
+     layout(matrix(c(1,3,2,4),2,2))
+      #layout.show(4)
+ 
+     for(gui in start_i:(start_i+conti_fig_num)){
+       sda = et_rd_ga7_hr16_by_sta[[gui]][,3:26]
+ 
+   #     各小時降雨平均
+       mean_24hr = apply(sda,2,mean)
+ 
+    #    各小時降雨標準差
+       sd_24hr = apply(sda,2,sd)
+ 
+     #   各測站事件數
+       nrow(sda)
+       
+       plot(x=seq(1,24),y=mean_24hr,ty="l",xlab="hr",ylab="rain depth(mm)",main=paste("staion_",gui,sep=""),ylim=c(0,50))
+       arrows(x0=seq(1,24),y0=mean_24hr,x1=,y1=mean_24hr+sd_24hr,col="blue",length=0.08)
+       legend("topright",legend = c("mean","sd",paste("sample",nrow(sda))),col=c("black","blue","black"),lty=c(1,1,0),lwd=2.5)
+ 
+     }
+      #dev.off()
+   }
+ 
+
+```
+
+```{r fig.width = 7, fig.height=7, echo=FALSE}
+   mean_sd_line_chart( start_i = 1,conti_fig_num = 3)
+   
+```
+
+```{r fig.width = 7, fig.height=7, echo=FALSE}
+mean_sd_line_chart( start_i = 5,conti_fig_num = 3)
+   
+```
+
+```{r fig.width = 7, fig.height=7, echo=FALSE}
+mean_sd_line_chart( start_i = 9,conti_fig_num = 3)
+   
+```
+
+```{r fig.width = 7, fig.height=7, echo=FALSE}
+mean_sd_line_chart( start_i = 13,conti_fig_num = 3)
+   
+```
+
+```{r fig.width = 7, fig.height=7, echo=FALSE}
+mean_sd_line_chart( start_i = 17,conti_fig_num = 3)
+```
+
+
+
+
+## 所有時雨量直方圖
+```{r hist, echo=FALSE}
+ct=hist(unlist(sda),xlab="rain depth(mm)",main = "all rain depth hist")
+legend("topright",legend =range(sda),title = "range",horiz = T)
+#分組各數
+ct$counts
+```
+
+#各測站平均.標準差
+```{r echo =FALSE}
+et_rd_ga7_hr16_by_sta=list()
+for(i in 1:20){
+  et_rd_ga7_hr16_by_sta[[i]] = et_rd_ga7_hr16[et_rd_ga7_hr16$sta==i,]
+}
+
+```
+
+
+#計算各測站逐時降雨平均.標準差(rbind)
+```{r echo =FALSE}
+cal_mean_sd_by_sta_rbind = function(x){
+  sda = x[,3:26]
+
+  #各小時降雨平均
+  mean_24hr = apply(sda,2,mean)
+  
+  #各小時降雨標準差
+  sd_24hr = apply(sda,2,sd)
+  return(rbind(mean_24hr,sd_24hr))
+}
+rd_parameter_rbind = sapply(et_rd_ga7_hr16_by_sta,cal_mean_sd_by_sta_rbind)
+colnames(rd_parameter_rbind)=c(paste("sta",seq(1,20),sep=""))
+rownames(rd_parameter_rbind)=paste(c("mean","sd"),rep(seq(1,24),each=2),sep="")
+```
+
+
+#計算各測站逐時降雨平均.標準差(cbind)
+```{r echo =FALSE}
+cal_mean_sd_by_sta_cbind = function(x){
+  sda = x[,3:26]
+  
+  #各小時降雨平均
+  mean_24hr = apply(sda,2,mean)
+  
+  #各小時降雨標準差
+  sd_24hr = apply(sda,2,sd)
+  return(cbind(mean_24hr,sd_24hr))
+}
+ rd_parameter_cbind = sapply(et_rd_ga7_hr16_by_sta,cal_mean_sd_by_sta_cbind)
+ colnames(rd_parameter_cbind)=c(paste("sta",seq(1,20),sep=""))
+ rownames(rd_parameter_cbind)=c(paste("mean_",seq(1,24),sep=""),paste("sd_",seq(1,24),sep=""))
+```
+
+
+#20站事件數
+```{r echo =FALSE}
+ sapply(et_rd_ga7_hr16_by_sta,nrow)
+```
+
+
+
+# ```{r echo =FALSE}
+# library(tables)
+# library(Hmisc)
+# library(knitr)
+# 
+# 
+# 
+# invisible(booktabs())
+# latex(tabular( (sd1+mean2 ) ~ (mean1+sd1) + Format(digits=2), data = table_reorg))
+# 
+# 
+# # knitr::kable(rd_parameter_rbind, caption = "mean and sd",digits = 3)
+# # kable_styling(x_html, "striped", position = "left", font_size = 7)
+# ```
+```{r}
+dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "html", caption = "Test Table") %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F) %>%
+  add_header_above(c(" ", "Group 1" = 2, "Group 2[note]" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+#rd_parameter_rbind
+
+```
+
+```{r}
+dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "latex", booktabs = T, caption = "Test Table Letax") %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                full_width = F) %>%
+  add_header_above(c(" ", "Sta 1" = 2, "Sta 2" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+```
+
+```{r}
+load("C:/Users/rslab/BU/2018NJ/Touqian1119/TouqianWorkPlace/rd_parameter_kable.RData")
+```
+
+```{r}
+dt = round(rd_parameter_kable[,1:10],2)
+#dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "html", caption = "Test Table") %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F) %>%
+  add_header_above(c(" ", "Sta 1" = 2, "Sta 2" = 2, "Sta 3" = 2, "Sta 4" = 2, "Sta 5" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+```
+
+
+```{r}
+dt = round(rd_parameter_kable[,11:20],2)
+#dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "html", caption = "Test Table") %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F) %>%
+  add_header_above(c(" ",
+                     "Sta 6" = 2,
+                     "Sta 7" = 2,
+                     "Sta 8" = 2,
+                     "Sta 9" = 2,
+                     "Sta 10" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+```
+
+```{r}
+dt = round(rd_parameter_kable[,21:30],2)
+#dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "html", caption = "Test Table") %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F) %>%
+  add_header_above(c(" ",
+                     "Sta 11" = 2,
+                     "Sta 12" = 2,
+                     "Sta 13" = 2,
+                     "Sta 14" = 2,
+                     "Sta 15" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+```
+
+```{r}
+dt = round(rd_parameter_kable[,31:40],2)
+#dt = t(rd_parameter_rbind[1:4,])
+kable(dt, format = "html", caption = "Test Table") %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F) %>%
+  add_header_above(c(" ",
+                     "Sta 16" = 2,
+                     "Sta 17" = 2,
+                     "Sta 18" = 2,
+                     "Sta 19" = 2,
+                     "Sta 20" = 2)) %>%
+  add_footnote(c("table footnote"))
+
+```
